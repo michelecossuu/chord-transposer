@@ -2,12 +2,17 @@ package com.michelecossu.chords.transposer.service.impl;
 
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.FileInputStream;
 import java.nio.file.Files;
@@ -324,5 +329,90 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
                 .orElse("C"); // Default a C se non trova accordi
+    }
+
+    public byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            document.addPage(page);
+
+            PDPageContentStream contentStream = new PDPageContentStream(document, page);
+
+            // Set title with sanitized text
+            contentStream.beginText();
+            contentStream.setFont(PDType1Font.HELVETICA_BOLD, 14);
+            contentStream.newLineAtOffset(50, 750);
+            String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
+            String titleText = sanitizeText(baseName + " (" + originalKey + " → " + targetKey + ")");
+            contentStream.showText(titleText);
+            contentStream.endText();
+
+            // Set content
+            contentStream.beginText();
+            contentStream.setFont(PDType1Font.COURIER, 11);
+            contentStream.setLeading(14); // Line spacing
+            contentStream.newLineAtOffset(50, 720);
+
+            // Process content line by line
+            String[] lines = content.split("\n");
+            float yPosition = 720;
+
+            for (String line : lines) {
+                // Sanitize each line
+                String sanitizedLine = sanitizeText(line);
+
+                // Check if we need a new page
+                if (yPosition < 50) {
+                    contentStream.endText();
+                    contentStream.close();
+
+                    page = new PDPage(PDRectangle.A4);
+                    document.addPage(page);
+
+                    contentStream = new PDPageContentStream(document, page);
+
+                    contentStream.beginText();
+                    contentStream.setFont(PDType1Font.COURIER, 11);
+                    contentStream.setLeading(14);
+                    yPosition = 750;
+                    contentStream.newLineAtOffset(50, yPosition);
+                }
+
+                // Handle long lines
+                if (sanitizedLine.length() > 100) {
+                    for (int i = 0; i < sanitizedLine.length(); i += 100) {
+                        String subLine = sanitizedLine.substring(i, Math.min(i + 100, sanitizedLine.length()));
+                        contentStream.showText(subLine);
+                        contentStream.newLine();
+                        yPosition -= 14;
+                    }
+                } else {
+                    contentStream.showText(sanitizedLine);
+                    contentStream.newLine();
+                    yPosition -= 14;
+                }
+            }
+
+            contentStream.endText();
+            contentStream.close();
+
+            document.save(baos);
+        }
+
+        return baos.toByteArray();
+    }
+
+    /**
+     * Sanitizes text to ensure compatibility with PDF standard fonts
+     */
+    private String sanitizeText(String text) {
+        if (text == null) return "";
+
+        // Replace special characters that might cause issues
+        return text.replaceAll("[^ -~]", " ") // Replace non-ASCII printable chars with spaces
+                .replace("→", "->")                  // Replace arrow with ASCII equivalent
+                .replace("\t", "    ");              // Replace tabs with spaces
     }
 }

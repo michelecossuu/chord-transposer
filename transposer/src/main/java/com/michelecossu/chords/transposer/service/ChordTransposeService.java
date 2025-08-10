@@ -8,4 +8,5 @@ public interface ChordTransposeService {
     String transposeContent(String content, int semitones);
     int calculateSemitones(String fromKey, String toKey);
     String detectKey(String content);
+    byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException;
 }
