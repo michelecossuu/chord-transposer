@@ -62,13 +62,13 @@ public class ChordTransposerController {
                     request.targetKey(), semitones, true);
             return ResponseEntity.ok(response);
 
-        } catch (IOException e) {
+        } catch (IOException _) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
 
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
 
-        } catch (Exception e) {
+        } catch (Exception _) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
@@ -115,92 +115,17 @@ public class ChordTransposerController {
                     .contentType(MediaType.APPLICATION_PDF)
                     .contentLength(pdfBytes.length)
                     .body(resource);
-        } catch (IOException e) {
+        } catch (IOException _) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(null);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(null);
-        } catch (Exception e) {
+        } catch (Exception _) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(null);
         }
     }
-
-    private String getFileExtension(String fileName) {
-        int lastDotIndex = fileName.lastIndexOf('.');
-        return lastDotIndex > 0 ? fileName.substring(lastDotIndex + 1) : "";
-    }
-
-//    private byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
-//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-//
-//        try (PDDocument document = new PDDocument()) {
-//            PDPage page = new PDPage(PDRectangle.A4);
-//            document.addPage(page);
-//
-//            PDPageContentStream contentStream = new PDPageContentStream(document, page);
-//
-//            // Set title
-//            contentStream.beginText();
-//            contentStream.setFont(PDType1Font.HELVETICA_BOLD, 14);
-//            contentStream.newLineAtOffset(50, 750);
-//            String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
-//            contentStream.showText(baseName + " (" + originalKey + " → " + targetKey + ")");
-//            contentStream.endText();
-//
-//            // Set content
-//            contentStream.beginText();
-//            contentStream.setFont(PDType1Font.COURIER, 11);
-//            contentStream.setLeading(14); // Line spacing
-//            contentStream.newLineAtOffset(50, 720);
-//
-//            // Process content line by line
-//            String[] lines = content.split("\n");
-//            float yPosition = 720;
-//
-//            for (String line : lines) {
-//                // Check if we need a new page
-//                if (yPosition < 50) {
-//                    contentStream.endText();
-//                    contentStream.close();
-//
-//                    page = new PDPage(PDRectangle.A4);
-//                    document.addPage(page);
-//
-//                    contentStream = new PDPageContentStream(document, page);
-//
-//                    contentStream.beginText();
-//                    contentStream.setFont(PDType1Font.COURIER, 11);
-//                    contentStream.setLeading(14);
-//                    yPosition = 750;
-//                    contentStream.newLineAtOffset(50, yPosition);
-//                }
-//
-//                // Handle long lines
-//                if (line.length() > 100) {
-//                    for (int i = 0; i < line.length(); i += 100) {
-//                        String subLine = line.substring(i, Math.min(i + 100, line.length()));
-//                        contentStream.showText(subLine);
-//                        contentStream.newLine();
-//                        yPosition -= 14;
-//                    }
-//                } else {
-//                    contentStream.showText(line);
-//                    contentStream.newLine();
-//                    yPosition -= 14;
-//                }
-//            }
-//
-//            // End text AFTER the loop is complete
-//            contentStream.endText();
-//            contentStream.close();
-//
-//            document.save(baos);
-//        }
-//
-//        return baos.toByteArray();
-//    }
 
     private byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -282,7 +207,7 @@ public class ChordTransposerController {
         if (text == null) return "";
 
         // Replace special characters that might cause issues
-        return text.replaceAll("[^\u0020-\u007E]", " ") // Replace non-ASCII printable chars with spaces
+        return text.replaceAll("[^ -~]", " ") // Replace non-ASCII printable chars with spaces
                 .replace("→", "->")                  // Replace arrow with ASCII equivalent
                 .replace("\t", "    ");              // Replace tabs with spaces
     }

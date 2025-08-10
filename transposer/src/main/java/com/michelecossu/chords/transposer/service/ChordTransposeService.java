@@ -189,7 +189,7 @@ public class ChordTransposeService {
      * @return The transposed content with chords adjusted accordingly.
      */
     public String transposeContent(String content, int semitones) {
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder();
         Matcher matcher = CHORD_PATTERN.matcher(content);
 
         while (matcher.find()) {
