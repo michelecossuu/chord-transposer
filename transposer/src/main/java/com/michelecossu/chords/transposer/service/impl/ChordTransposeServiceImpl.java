@@ -1,6 +1,9 @@
 package com.michelecossu.chords.transposer.service.impl;
 
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
+import com.michelecossu.chords.transposer.web.exception.ChordTransposeException;
+import com.michelecossu.chords.transposer.web.exception.TargetKeyException;
+import com.michelecossu.chords.transposer.web.request.TransposeRequest;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -10,6 +13,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -66,6 +70,51 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                     "ø\\d*" +              // ø (half-diminished)
                     ")?(?:/([A-G][#b]?))?\\b" // Optionally alternative bass (/E)
     );
+
+    @Override
+    public ByteArrayResource generatePdfWithTransposedChords(TransposeRequest request) {
+        try {
+            // Read the file
+            String originalContent = readFile(request.sourceFileName());
+
+            // Retrieve the original key
+            String originalKey = detectKey(originalContent);
+
+            // Calculate the number of semitones to transpose
+            int semitones;
+            if (request.targetKey() != null && !request.targetKey().isEmpty()) {
+                semitones = calculateSemitones(originalKey, request.targetKey());
+            } else {
+                throw new TargetKeyException("Target key is null or empty");
+            }
+
+            // Execute the transposition
+            String transposedContent = transposeContent(originalContent, semitones);
+
+            // Generate new file name
+            String originalFileName = request.sourceFileName();
+            String baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+            String outputFileName = baseName + "_" + request.targetKey() + ".pdf";
+
+            // Generate PDF with transposed content
+            byte[] pdfBytes = generatePdf(transposedContent, originalFileName, originalKey, request.targetKey());
+
+            // Save PDF to local filesystem
+            Path outputDirectory = Paths.get(filesDirectory);
+            Files.createDirectories(outputDirectory); // Create directories if they don't exist
+            Path outputPath = outputDirectory.resolve(outputFileName);
+            Files.write(outputPath, pdfBytes);
+
+            // Create resource for download
+            return new ByteArrayResource(pdfBytes);
+        } catch (IOException e) {
+            throw new ChordTransposeException("Error generating PDF: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw new ChordTransposeException("Invalid key provided: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ChordTransposeException("Unexpected error generating PDF: " + e.getMessage(), e);
+        }
+    }
 
     /**
      * Read a file and return its content as a string.
@@ -140,15 +189,15 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             // Extract text from tables if any
             document.getTables().forEach(table ->
-                table.getRows().forEach(row -> {
-                    row.getTableCells().forEach(cell -> {
-                        String cellText = cell.getText();
-                        if (cellText != null && !cellText.trim().isEmpty()) {
-                            content.append(cellText).append(" ");
-                        }
-                    });
-                    content.append("\n");
-                })
+                    table.getRows().forEach(row -> {
+                        row.getTableCells().forEach(cell -> {
+                            String cellText = cell.getText();
+                            if (cellText != null && !cellText.trim().isEmpty()) {
+                                content.append(cellText).append(" ");
+                            }
+                        });
+                        content.append("\n");
+                    })
             );
 
             return content.toString().trim();
@@ -341,8 +390,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @return A byte array representing the generated PDF file.
      * @throws IOException If an error occurs while generating the PDF.
      */
-    @Override
-    public byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
+    private byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         try (PDDocument document = new PDDocument()) {
