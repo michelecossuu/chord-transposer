@@ -5,5 +5,5 @@ import jakarta.validation.constraints.Pattern;
 
 public record TransposeRequest(
         @NotBlank String sourceFileName,
-        @NotBlank @Pattern(regexp = "^[A-G][#b]?[m]?$") String targetKey
+        @NotBlank @Pattern(regexp = "^[A-G][#b]?m?$") String targetKey
 ) {}

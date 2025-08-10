@@ -47,17 +47,17 @@ public class ChordTransposeService {
     // pattern to ricognize chords (like Cmaj, Dm7, Gsus4, etc)
     private static final Pattern CHORD_PATTERN = Pattern.compile(
             "\\b([A-G][#b]?)(" +
-                    "maj[0-9]*|" +           // maj, maj7, maj9, maj11, maj13
-                    "min[0-9]*|" +           // min, min7, min9, min11, min13
-                    "m[0-9]*|" +             // m, m7, m9, m11, m13
-                    "dim[0-9]*|" +           // dim, dim7
-                    "aug[0-9]*|" +           // aug, aug7
-                    "sus[24]?[0-9]*|" +      // sus, sus2, sus4, sus2add9, etc
-                    "add[0-9]+|" +           // add9, add11, add13
-                    "[0-9]+|" +              // 7, 9, 11, 13
-                    "\\+[0-9]*|" +           // +, +7 (increase symbol)
-                    "°[0-9]*|" +             // ° (decrease symbol)
-                    "ø[0-9]*" +              // ø (half-diminished)
+                    "maj\\d*|" +           // maj, maj7, maj9, maj11, maj13
+                    "min\\d*|" +           // min, min7, min9, min11, min13
+                    "m\\d*|" +             // m, m7, m9, m11, m13
+                    "dim\\d*|" +           // dim, dim7
+                    "aug\\d*|" +           // aug, aug7
+                    "sus[24]?\\d*|" +      // sus, sus2, sus4, sus2add9, etc
+                    "add\\d+|" +           // add9, add11, add13
+                    "\\d+|" +              // 7, 9, 11, 13
+                    "\\+\\d*|" +           // +, +7 (increase symbol)
+                    "°\\d*|" +             // ° (decrease symbol)
+                    "ø\\d*" +              // ø (half-diminished)
                     ")?(?:/([A-G][#b]?))?\\b" // Optionally alternative bass (/E)
     );
 
