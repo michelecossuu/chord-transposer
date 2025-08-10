@@ -331,6 +331,17 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                 .orElse("C"); // Default a C se non trova accordi
     }
 
+    /**
+     * Generate a PDF file with the transposed content.
+     *
+     * @param content The transposed content to be included in the PDF.
+     * @param sourceFileName The name of the source file (for title purposes).
+     * @param originalKey The original key of the song (for title purposes).
+     * @param targetKey The target key of the song (for title purposes).
+     * @return A byte array representing the generated PDF file.
+     * @throws IOException If an error occurs while generating the PDF.
+     */
+    @Override
     public byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
