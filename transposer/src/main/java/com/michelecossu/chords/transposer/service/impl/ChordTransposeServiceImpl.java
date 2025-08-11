@@ -74,13 +74,10 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     @Override
     public ByteArrayResource generatePdfWithTransposedChords(TransposeRequest request) {
         try {
-            // Read the file
             String originalContent = readFile(request.sourceFileName());
 
-            // Retrieve the original key
             String originalKey = detectKey(originalContent);
 
-            // Calculate the number of semitones to transpose
             int semitones;
             if (request.targetKey() != null && !request.targetKey().isEmpty()) {
                 semitones = calculateSemitones(originalKey, request.targetKey());
@@ -88,25 +85,11 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                 throw new TargetKeyException("Target key is null or empty");
             }
 
-            // Execute the transposition
             String transposedContent = transposeContent(originalContent, semitones);
 
-            // Generate new file name
-            String originalFileName = request.sourceFileName();
-            String baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
-            String outputFileName = baseName + "_" + request.targetKey() + ".pdf";
+            byte[] fileBytes = generateFile(request, transposedContent, originalKey);
 
-            // Generate PDF with transposed content
-            byte[] pdfBytes = generatePdf(transposedContent, originalFileName, originalKey, request.targetKey());
-
-            // Save PDF to local filesystem
-            Path outputDirectory = Paths.get(filesDirectory);
-            Files.createDirectories(outputDirectory); // Create directories if they don't exist
-            Path outputPath = outputDirectory.resolve(outputFileName);
-            Files.write(outputPath, pdfBytes);
-
-            // Create resource for download
-            return new ByteArrayResource(pdfBytes);
+            return new ByteArrayResource(fileBytes);
         } catch (IOException e) {
             throw new ChordTransposeException("Error generating PDF: " + e.getMessage(), e);
         } catch (IllegalArgumentException e) {
@@ -473,5 +456,39 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         return text.replaceAll("[^ -~]", " ") // Replace non-ASCII printable chars with spaces
                 .replace("→", "->")                  // Replace arrow with ASCII equivalent
                 .replace("\t", "    ");              // Replace tabs with spaces
+    }
+
+    /**
+     * Generate a file with the transposed content and save it to the local filesystem.
+     *
+     * @param request The request containing the original chords
+     * @return A byte array representing the generated file
+     */
+    private byte[] generateFile(TransposeRequest request, String transposedContent, String originalKey) throws IOException {
+        String outputFileName = generateFileName(request.sourceFileName(), request.targetKey());
+
+        // Generate PDF with transposed content
+        byte[] pdfBytes = generatePdf(transposedContent, request.sourceFileName(), originalKey, request.targetKey());
+
+        // Save PDF to local filesystem
+        Path outputDirectory = Paths.get(filesDirectory);
+        Files.createDirectories(outputDirectory); // Create directories if they don't exist
+        Path outputPath = outputDirectory.resolve(outputFileName);
+        Files.write(outputPath, pdfBytes);
+
+        return pdfBytes;
+    }
+
+    /**
+     * Generate a file name for the transposed file based on the source file name and target key.
+     * The generated file name will be in the format: "sourceFileName_targetKey.pdf".
+     *
+     * @param sourceFileName The name of the source file.
+     * @param targetKey The target key for the transposition.
+     * @return A generated
+     */
+    private String generateFileName(String sourceFileName, String targetKey) {
+        String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
+        return baseName + "_" + targetKey + ".pdf";
     }
 }
