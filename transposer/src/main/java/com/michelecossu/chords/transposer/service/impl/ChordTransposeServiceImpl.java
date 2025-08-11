@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -125,11 +126,27 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             return switch (extension) {
                 case "pdf" -> readPDFFile(filePath);
                 case "docx" -> readDOCXFile(filePath);
-                default -> Files.readString(filePath);
+                case "txt" -> Files.readString(filePath, StandardCharsets.UTF_8);
+                default -> {
+                    if (!isAllowedExtension(extension)) {
+                        throw new SecurityException("Unsupported file type: " + extension);
+                    }
+                    yield Files.readString(filePath, StandardCharsets.UTF_8);
+                }
             };
         } catch (Exception e) {
-            throw new IOException("Error by reading the file " + fileName + ": " + e.getMessage(), e);
+            throw new IOException("Error reading file " + fileName + ": " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Check if the file extension is allowed for processing.
+     *
+     * @param extension The file extension to check.
+     * @return true if the extension is allowed, false otherwise.
+     */
+    private boolean isAllowedExtension(String extension) {
+        return List.of("pdf", "docx", "txt").contains(extension.toLowerCase());
     }
 
     /**
