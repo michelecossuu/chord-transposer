@@ -87,7 +87,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             String transposedContent = transposeContent(originalContent, semitones);
 
-            byte[] fileBytes = generateFile(request, transposedContent, originalKey);
+            byte[] fileBytes = generateFile(request, transposedContent);
 
             return new ByteArrayResource(fileBytes);
         } catch (IOException e) {
@@ -364,16 +364,47 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
+     * Generate a file with the transposed content and save it to the local filesystem.
+     *
+     * @param request The request containing the original chords
+     * @return A byte array representing the generated file
+     */
+    private byte[] generateFile(TransposeRequest request, String transposedContent) throws IOException {
+        String outputFileName = generateFileName(request.sourceFileName(), request.targetKey());
+
+        // Generate PDF with transposed content
+        byte[] pdfBytes = generatePdf(transposedContent);
+
+        // Save PDF to local filesystem
+        Path outputDirectory = Paths.get(filesDirectory);
+        Files.createDirectories(outputDirectory); // Create directories if they don't exist
+        Path outputPath = outputDirectory.resolve(outputFileName);
+        Files.write(outputPath, pdfBytes);
+
+        return pdfBytes;
+    }
+
+    /**
+     * Generate a file name for the transposed file based on the source file name and target key.
+     * The generated file name will be in the format: "sourceFileName_targetKey.pdf".
+     *
+     * @param sourceFileName The name of the source file.
+     * @param targetKey The target key for the transposition.
+     * @return A generated
+     */
+    private String generateFileName(String sourceFileName, String targetKey) {
+        String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
+        return baseName + "_" + targetKey + ".pdf";
+    }
+
+    /**
      * Generate a PDF file with the transposed content.
      *
      * @param content The transposed content to be included in the PDF.
-     * @param sourceFileName The name of the source file (for title purposes).
-     * @param originalKey The original key of the song (for title purposes).
-     * @param targetKey The target key of the song (for title purposes).
      * @return A byte array representing the generated PDF file.
      * @throws IOException If an error occurs while generating the PDF.
      */
-    private byte[] generatePdf(String content, String sourceFileName, String originalKey, String targetKey) throws IOException {
+    private byte[] generatePdf(String content) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         try (PDDocument document = new PDDocument()) {
@@ -382,26 +413,31 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             PDPageContentStream contentStream = new PDPageContentStream(document, page);
 
-            // Set title with sanitized text
+            // Process content line by line
+            String[] lines = content.split("\n");
+            float yPosition = 750;
+
+            // Extract the first line as title
+            String titleText = lines.length > 0 ? sanitizeText(lines[0]) : "";
+
+            // Set title
             contentStream.beginText();
             contentStream.setFont(PDType1Font.HELVETICA_BOLD, 14);
-            contentStream.newLineAtOffset(50, 750);
-            String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
-            String titleText = sanitizeText(baseName + " (" + originalKey + " → " + targetKey + ")");
+            contentStream.newLineAtOffset(50, yPosition);
             contentStream.showText(titleText);
             contentStream.endText();
 
-            // Set content
+            yPosition -= 30; // Add space after title
+
+            // Set content starting from the second line
             contentStream.beginText();
             contentStream.setFont(PDType1Font.COURIER, 11);
             contentStream.setLeading(14); // Line spacing
-            contentStream.newLineAtOffset(50, 720);
+            contentStream.newLineAtOffset(50, yPosition);
 
-            // Process content line by line
-            String[] lines = content.split("\n");
-            float yPosition = 720;
-
-            for (String line : lines) {
+            // Skip the first line (title) when adding the content
+            for (int i = 1; i < lines.length; i++) {
+                String line = lines[i];
                 // Sanitize each line
                 String sanitizedLine = sanitizeText(line);
 
@@ -424,8 +460,8 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
                 // Handle long lines
                 if (sanitizedLine.length() > 100) {
-                    for (int i = 0; i < sanitizedLine.length(); i += 100) {
-                        String subLine = sanitizedLine.substring(i, Math.min(i + 100, sanitizedLine.length()));
+                    for (int j = 0; j < sanitizedLine.length(); j += 100) {
+                        String subLine = sanitizedLine.substring(j, Math.min(j + 100, sanitizedLine.length()));
                         contentStream.showText(subLine);
                         contentStream.newLine();
                         yPosition -= 14;
@@ -456,39 +492,5 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         return text.replaceAll("[^ -~]", " ") // Replace non-ASCII printable chars with spaces
                 .replace("→", "->")                  // Replace arrow with ASCII equivalent
                 .replace("\t", "    ");              // Replace tabs with spaces
-    }
-
-    /**
-     * Generate a file with the transposed content and save it to the local filesystem.
-     *
-     * @param request The request containing the original chords
-     * @return A byte array representing the generated file
-     */
-    private byte[] generateFile(TransposeRequest request, String transposedContent, String originalKey) throws IOException {
-        String outputFileName = generateFileName(request.sourceFileName(), request.targetKey());
-
-        // Generate PDF with transposed content
-        byte[] pdfBytes = generatePdf(transposedContent, request.sourceFileName(), originalKey, request.targetKey());
-
-        // Save PDF to local filesystem
-        Path outputDirectory = Paths.get(filesDirectory);
-        Files.createDirectories(outputDirectory); // Create directories if they don't exist
-        Path outputPath = outputDirectory.resolve(outputFileName);
-        Files.write(outputPath, pdfBytes);
-
-        return pdfBytes;
-    }
-
-    /**
-     * Generate a file name for the transposed file based on the source file name and target key.
-     * The generated file name will be in the format: "sourceFileName_targetKey.pdf".
-     *
-     * @param sourceFileName The name of the source file.
-     * @param targetKey The target key for the transposition.
-     * @return A generated
-     */
-    private String generateFileName(String sourceFileName, String targetKey) {
-        String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
-        return baseName + "_" + targetKey + ".pdf";
     }
 }
