@@ -124,7 +124,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @return The content of the file as a string.
      * @throws IOException If the file does not exist or cannot be read.
      */
-    public String readFile(String fileName) throws IOException {
+    private String readFile(String fileName) throws IOException {
         Path filePath = Paths.get(filesDirectory, fileName);
         if (!Files.exists(filePath)) {
             throw new IOException("File non found: " + fileName);
@@ -243,7 +243,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
      * @return The transposed content with chords adjusted accordingly.
      */
-    public String transposeContent(String content, int semitones) {
+    private String transposeContent(String content, int semitones) {
         StringBuilder result = new StringBuilder();
         Matcher matcher = CHORD_PATTERN.matcher(content);
 
@@ -264,7 +264,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
      * @return The transposed chord as a string.
      */
-    public String transposeChord(String chord, int semitones) {
+    private String transposeChord(String chord, int semitones) {
         // Pattern to match chords in the format: RootNote[Extensions][OptionalBass]
         Pattern chordParser = Pattern.compile("^([A-G][#b]?)(.*?)(?:/([A-G][#b]?))?$");
         Matcher matcher = chordParser.matcher(chord);
@@ -336,7 +336,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param toKey The target key (e.g., "G", "Am").
      * @return The number of semitones to transpose from the fromKey to the toKey.
      */
-    public int calculateSemitones(String fromKey, String toKey) {
+    private int calculateSemitones(String fromKey, String toKey) {
         // Remove the 'm' suffix if present, as it is not needed for semitone calculation
         String fromRoot = fromKey.replaceAll("m$", "");
         String toRoot = toKey.replaceAll("m$", "");
@@ -362,7 +362,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param content The content of the song as a string.
      * @return The detected key as a string (e.g., "C", "G", "Am").
      */
-    public String detectKey(String content) {
+    private String detectKey(String content) {
         // Simple approach to detect the key based on chord frequency
         // Count the frequency of each root note in the content
         Map<String, Integer> chordFrequency = new HashMap<>();
