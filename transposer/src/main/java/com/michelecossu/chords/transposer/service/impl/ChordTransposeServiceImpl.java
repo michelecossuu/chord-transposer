@@ -4,6 +4,7 @@ import com.michelecossu.chords.transposer.service.ChordTransposeService;
 import com.michelecossu.chords.transposer.web.exception.ChordTransposeException;
 import com.michelecossu.chords.transposer.web.exception.TargetKeyException;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
+import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -13,7 +14,6 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -72,7 +72,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     );
 
     @Override
-    public ByteArrayResource generatePdfWithTransposedChords(TransposeRequest request) {
+    public TransposeResponse generatePdfWithTransposedChords(TransposeRequest request) {
         try {
             String originalContent = readFile(request.sourceFileName());
 
@@ -87,9 +87,15 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             String transposedContent = transposeContent(originalContent, semitones);
 
-            byte[] fileBytes = generateFile(request, transposedContent);
+            String transposedFileName = generateFile(request, transposedContent);
 
-            return new ByteArrayResource(fileBytes);
+            return new TransposeResponse(
+                    request.sourceFileName(),
+                    transposedFileName,
+                    originalKey,
+                    request.targetKey(),
+                    true
+            );
         } catch (IOException e) {
             throw new ChordTransposeException("Error generating PDF: " + e.getMessage(), e);
         } catch (IllegalArgumentException e) {
@@ -369,7 +375,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param request The request containing the original chords
      * @return A byte array representing the generated file
      */
-    private byte[] generateFile(TransposeRequest request, String transposedContent) throws IOException {
+    private String generateFile(TransposeRequest request, String transposedContent) throws IOException {
         String outputFileName = generateFileName(request.sourceFileName(), request.targetKey());
 
         // Generate PDF with transposed content
@@ -381,7 +387,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         Path outputPath = outputDirectory.resolve(outputFileName);
         Files.write(outputPath, pdfBytes);
 
-        return pdfBytes;
+        return outputFileName;
     }
 
     /**

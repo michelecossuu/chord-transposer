@@ -2,8 +2,8 @@ package com.michelecossu.chords.transposer.web.controller;
 
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
+import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import jakarta.validation.Valid;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,14 +22,13 @@ public class ChordTransposerController {
     }
 
     @PostMapping("/create-file")
-    public ResponseEntity<ByteArrayResource> createTransposedFile(@Valid @RequestBody TransposeRequest request) throws IOException {
-        ByteArrayResource resource = chordTransposeService.generatePdfWithTransposedChords(request);
+    public ResponseEntity<TransposeResponse> createTransposedFile(@Valid @RequestBody TransposeRequest request) throws IOException {
+        TransposeResponse response = chordTransposeService.generatePdfWithTransposedChords(request);
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
-                .contentType(MediaType.APPLICATION_PDF)
-                .contentLength(resource.getFile().length())
-                .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.transposedFileName() + "\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(response);
     }
 
 }

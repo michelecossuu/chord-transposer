@@ -1,7 +1,7 @@
 package com.michelecossu.chords.transposer.service;
 
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
-import org.springframework.core.io.ByteArrayResource;
+import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import java.io.IOException;
 
 public interface ChordTransposeService {
@@ -10,8 +10,8 @@ public interface ChordTransposeService {
      * Generates a PDF file with transposed chords based on the provided request.
      *
      * @param request the request containing the original chords and the desired transposition
-     * @return a ByteArrayResource containing the generated PDF file
+     * @return a TransposeResponse containing the details of the transposed file
      * @throws IOException if an error occurs during PDF generation
      */
-    ByteArrayResource generatePdfWithTransposedChords(TransposeRequest request) throws IOException;
+    TransposeResponse generatePdfWithTransposedChords(TransposeRequest request) throws IOException;
 }
