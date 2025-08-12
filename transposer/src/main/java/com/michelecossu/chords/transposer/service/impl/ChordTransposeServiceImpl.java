@@ -189,6 +189,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             for (XWPFParagraph paragraph : paragraphs) {
                 String text = paragraph.getText();
                 if (text != null && !text.trim().isEmpty()) {
+                    text = normalizeSpacingForChords(text);
                     content.append(text).append("\n");
                 }
             }
@@ -199,6 +200,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                         row.getTableCells().forEach(cell -> {
                             String cellText = cell.getText();
                             if (cellText != null && !cellText.trim().isEmpty()) {
+                                cellText = normalizeSpacingForChords(cellText);
                                 content.append(cellText).append(" ");
                             }
                         });
@@ -208,6 +210,20 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             return content.toString().trim();
         }
+    }
+
+    /**
+     * Converts standard spaces to half-width spaces to maintain exact chord positioning
+     *
+     * @param text The text to process
+     * @return Text with half-width spaces
+     */
+    private String normalizeSpacingForChords(String text) {
+        if (text == null) return "";
+
+        return text
+                .replaceAll("[\\u00A0\\u2009\\u200A\\u202F\\u205F\\u2005]", " ")
+                .replace("\t", "    ");
     }
 
     /**
@@ -452,53 +468,68 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             yPosition -= 30; // Add space after title
 
-            // Set content starting from the second line
-            contentStream.beginText();
-            contentStream.setFont(PDType1Font.COURIER, 11);
-            contentStream.setLeading(14); // Line spacing
-            contentStream.newLineAtOffset(50, yPosition);
+            // Font settings
+            PDType1Font font = PDType1Font.COURIER;
+            float fontSize = 11;
+            float standardSpaceWidth = font.getSpaceWidth() * fontSize / 1000;
+            float halfSpaceWidth = standardSpaceWidth / 2; // Half-width space for chord alignment
 
-            // Skip the first line (title) when adding the content
             for (int i = 1; i < lines.length; i++) {
-                String line = lines[i];
-                // Sanitize each line
-                String sanitizedLine = sanitizeText(line);
+                String line = sanitizeText(lines[i]);
 
                 // Check if we need a new page
                 if (yPosition < 50) {
-                    contentStream.endText();
-                    contentStream.close();
-
                     page = new PDPage(PDRectangle.A4);
                     document.addPage(page);
-
+                    contentStream.close();
                     contentStream = new PDPageContentStream(document, page);
-
-                    contentStream.beginText();
-                    contentStream.setFont(PDType1Font.COURIER, 11);
-                    contentStream.setLeading(14);
                     yPosition = 750;
-                    contentStream.newLineAtOffset(50, yPosition);
                 }
 
-                // Handle long lines
-                if (sanitizedLine.length() > 100) {
-                    for (int j = 0; j < sanitizedLine.length(); j += 100) {
-                        String subLine = sanitizedLine.substring(j, Math.min(j + 100, sanitizedLine.length()));
-                        contentStream.showText(subLine);
-                        contentStream.newLine();
-                        yPosition -= 14;
+                // Process line character by character with precise positioning
+                float xPosition = 50; // Starting x position
+
+                contentStream.beginText();
+                contentStream.setFont(font, fontSize);
+                contentStream.newLineAtOffset(xPosition, yPosition);
+
+                StringBuilder textBuffer = new StringBuilder();
+
+                for (int j = 0; j < line.length(); j++) {
+                    char c = line.charAt(j);
+
+                    if (c == ' ') {
+                        // Output any accumulated text
+                        if (!textBuffer.isEmpty()) {
+                            contentStream.showText(textBuffer.toString());
+                            textBuffer.setLength(0); // Clear buffer
+                        }
+
+                        // End current text object, move position, and start a new text object
+                        contentStream.endText();
+                        xPosition += halfSpaceWidth; // Half-width space
+                        contentStream.beginText();
+                        contentStream.setFont(font, fontSize);
+                        contentStream.newLineAtOffset(xPosition, yPosition);
+                    } else {
+                        // Add character to buffer
+                        textBuffer.append(c);
+
+                        // Track position for next character
+                        xPosition += font.getStringWidth(String.valueOf(c)) * fontSize / 1000;
                     }
-                } else {
-                    contentStream.showText(sanitizedLine);
-                    contentStream.newLine();
-                    yPosition -= 14;
                 }
+
+                // Output any remaining text
+                if (!textBuffer.isEmpty()) {
+                    contentStream.showText(textBuffer.toString());
+                }
+
+                contentStream.endText();
+                yPosition -= 14; // Move to next line
             }
 
-            contentStream.endText();
             contentStream.close();
-
             document.save(baos);
         }
 
