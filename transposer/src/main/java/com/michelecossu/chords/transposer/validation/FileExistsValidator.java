@@ -18,6 +18,11 @@ public class FileExistsValidator implements ConstraintValidator<FileExists, Stri
     @Override
     public boolean isValid(String fileName, ConstraintValidatorContext context) {
         try {
+            if (fileName == null || fileName.isBlank()) {
+                addCustomConstraintViolation(context, "File Name cannot be null or blank");
+                return false;
+            }
+
             Path filePath = Paths.get(filesDirectory, fileName).normalize();
 
             if (!Files.exists(filePath)) {

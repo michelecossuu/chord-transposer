@@ -5,6 +5,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 public record TransposeRequest(
-        @NotBlank(message = "Source file name is required") @FileExists String sourceFileName,
-        @NotBlank(message = "Target key required") @Pattern(regexp = "^[A-G][#b]?m?$") String targetKey
+        @FileExists String sourceFileName,
+        @NotBlank(message = "Target key required")
+        @Pattern(
+                regexp = "^(?!Cb$|Fb$|E#$|B#$|Cbm$|Fbm$|E#m$|B#m$)[A-G][#b]?m?$",
+                message = "Invalid key format"
+        ) String targetKey
 ) {}
