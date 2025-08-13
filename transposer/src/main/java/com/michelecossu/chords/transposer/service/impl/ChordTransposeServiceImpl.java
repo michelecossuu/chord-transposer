@@ -1,8 +1,7 @@
 package com.michelecossu.chords.transposer.service.impl;
 
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
-import com.michelecossu.chords.transposer.web.exception.ChordTransposeException;
-import com.michelecossu.chords.transposer.web.exception.TargetKeyException;
+import com.michelecossu.chords.transposer.web.exception.*;
 import com.michelecossu.chords.transposer.web.request.RelativeTransposeRequest;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
 import com.michelecossu.chords.transposer.web.response.TransposeResponse;
@@ -73,6 +72,15 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                     ")?(?:/([A-G][#b]?))?\\b" // Optionally alternative bass (/E)
     );
 
+    /**
+     * Generates a PDF file with transposed chords based on the provided request.
+     * This method reads the original file, detects the key, transposes the chords,
+     * and generates a new PDF file with the transposed chords.
+     *
+     * @param request the request containing the original chords and the target key
+     * @return a TransposeResponse containing the details of the transposed file
+     * @throws ChordTransposeException if an error occurs during the transposition or file generation
+     */
     @Override
     public TransposeResponse generatePdfWithTransposedChords(TransposeRequest request) {
         try {
@@ -108,17 +116,63 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
-     * Read a file and return its content as a string.
-     * Supports PDF, DOCX, and plain text.
+     * Transpose chords by a specified number of semitones relative to the original chords.
+     * This method reads the original file, transposes the chords by the specified number of semitones,
+     * and generates a new PDF file with the transposed chords.
+     *
+     * @param request the request containing the original chords and the number of semitones to transpose
+     * @return a TransposeResponse containing the details of the transposed file
+     * @throws ChordTransposeException if an error occurs during the transposition or file generation
+     */
+    @Override
+    public TransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request) {
+        try {
+            String originalContent = readFile(request.sourceFileName());
+
+            // Transpose the content by the specified number of semitones
+            String transposedContent = transposeContent(originalContent, request.semitones());
+
+            // Generate the output file
+            String transposedFileName = generateFileNameWithSemitoneOffset(
+                    request.sourceFileName(),
+                    request.semitones()
+            );
+
+            // Generate and save the PDF
+            byte[] pdfBytes = generatePdf(transposedContent);
+            Path outputDirectory = Paths.get(filesDirectory);
+            Files.createDirectories(outputDirectory);
+            Path outputPath = outputDirectory.resolve(transposedFileName);
+            Files.write(outputPath, pdfBytes);
+
+            return new TransposeResponse(
+                    request.sourceFileName(),
+                    transposedFileName,
+                    null,
+                    request.semitones().toString(),
+                    true
+            );
+        } catch (IOException e) {
+            throw new ChordTransposeException("Error generating PDF: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ChordTransposeException("Unexpected error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Read the content of a file based on its extension.
+     * This method supports PDF, DOCX, and TXT files.
      *
      * @param fileName The name of the file to read.
      * @return The content of the file as a string.
-     * @throws IOException If the file does not exist or cannot be read.
+     * @throws FileNotFoundException if the file does not exist.
+     * @throws ReadFileException if an error occurs while reading the file.
+     * @throws SecurityException if the file type is not supported.
      */
     private String readFile(String fileName) throws IOException {
         Path filePath = Paths.get(filesDirectory, fileName);
         if (!Files.exists(filePath)) {
-            throw new IOException("File non found: " + fileName);
+            throw new FileNotFoundException("File non found: " + fileName);
         }
 
         String extension = getFileExtension(fileName).toLowerCase();
@@ -135,8 +189,8 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                     yield Files.readString(filePath, StandardCharsets.UTF_8);
                 }
             };
-        } catch (Exception e) {
-            throw new IOException("Error reading file " + fileName + ": " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new ReadFileException("Error reading file " + fileName + ": " + e.getMessage(), e);
         }
     }
 
@@ -168,7 +222,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             String text = pdfStripper.getText(document);
 
             // Clean up common PDF extraction artifacts
-            return cleanPDFText(text);
+            return cleanExtractedPdfText(text);
         }
     }
 
@@ -190,7 +244,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             for (XWPFParagraph paragraph : paragraphs) {
                 String text = paragraph.getText();
                 if (text != null && !text.trim().isEmpty()) {
-                    text = normalizeSpacingForChords(text);
+                    text = normalizeWhitespaceForChords(text);
                     content.append(text).append("\n");
                 }
             }
@@ -201,7 +255,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                         row.getTableCells().forEach(cell -> {
                             String cellText = cell.getText();
                             if (cellText != null && !cellText.trim().isEmpty()) {
-                                cellText = normalizeSpacingForChords(cellText);
+                                cellText = normalizeWhitespaceForChords(cellText);
                                 content.append(cellText).append(" ");
                             }
                         });
@@ -214,12 +268,14 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
-     * Converts standard spaces to half-width spaces to maintain exact chord positioning
+     * Normalize whitespace in chords to ensure consistent formatting.
+     * This method replaces non-breaking spaces and other whitespace characters
+     * with regular spaces, and replaces tabs with four spaces.
      *
-     * @param text The text to process
-     * @return Text with half-width spaces
+     * @param text The text to normalize.
+     * @return The normalized text.
      */
-    private String normalizeSpacingForChords(String text) {
+    private String normalizeWhitespaceForChords(String text) {
         if (text == null) return "";
 
         return text
@@ -228,12 +284,14 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
-     * Clean up text extracted from PDF files to remove artifacts and normalize formatting.
+     * Clean up the extracted text from a PDF file.
+     * This method removes excessive whitespace, page headers/footers,
+     * and common PDF artifacts to produce cleaner text.
      *
-     * @param text The raw text extracted from the PDF.
+     * @param text The extracted text from the PDF.
      * @return The cleaned text.
      */
-    private String cleanPDFText(String text) {
+    private String cleanExtractedPdfText(String text) {
         return text
                 // Remove excessive whitespace
                 .replaceAll("\\s{3,}", " ")
@@ -250,9 +308,10 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     /**
      * Get the file extension from the file name.
+     * This method extracts the substring after the last dot in the file name.
      *
      * @param fileName The name of the file.
-     * @return The file extension or an empty string if no extension is found.
+     * @return The file extension as a string, or an empty string if no extension is found.
      */
     private String getFileExtension(String fileName) {
         int lastDotIndex = fileName.lastIndexOf('.');
@@ -260,11 +319,13 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
-     * Transpose the content of a song by transposing all chords found in the text.
+     * Transpose the content of the song by the specified number of semitones.
+     * This method finds all chords in the content, transposes them,
+     * and returns the modified content with transposed chords.
      *
      * @param content The content of the song as a string.
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
-     * @return The transposed content with chords adjusted accordingly.
+     * @return The transposed content with chords modified according to the specified semitones.
      */
     private String transposeContent(String content, int semitones) {
         StringBuilder result = new StringBuilder();
@@ -282,10 +343,11 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     /**
      * Transpose a single chord by the specified number of semitones.
+     * This method handles chords in the format: RootNote[Extensions][OptionalBass].
      *
      * @param chord The chord to transpose (e.g., "C", "Dm7", "Gsus4/E").
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
-     * @return The transposed chord as a string.
+     * @return The transposed chord as a string, or the original chord if it cannot be transposed.
      */
     private String transposeChord(String chord, int semitones) {
         // Pattern to match chords in the format: RootNote[Extensions][OptionalBass]
@@ -322,6 +384,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     /**
      * Transpose a single note by the specified number of semitones.
+     * This method handles both sharps and flats based on the transposition direction.
      *
      * @param note The note to transpose (e.g., "C", "D#", "Bb").
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
@@ -336,7 +399,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         int newSemitone = (currentSemitone + semitones + 12) % 12;
 
         // Choose between sharps and flats based on the semitone value
-        return shouldUseFlats(semitones) ? FLAT_NOTES[newSemitone] : NOTES[newSemitone];
+        return shouldPreferFlats(semitones) ? FLAT_NOTES[newSemitone] : NOTES[newSemitone];
     }
 
     /**
@@ -346,7 +409,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param semitones The number of semitones to transpose.
      * @return true if flats should be used, false if sharps should be used.
      */
-    private boolean shouldUseFlats(int semitones) {
+    private boolean shouldPreferFlats(int semitones) {
         // Simplify the logic for determining whether to use flats or sharps
         return semitones < 0 || semitones % 12 == 1 || semitones % 12 == 3 ||
                 semitones % 12 == 6 || semitones % 12 == 8 || semitones % 12 == 10;
@@ -354,10 +417,11 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     /**
      * Calculate the number of semitones between two keys.
+     * This method assumes that the keys are valid and in the format "C", "Dm", "G#", etc.
      *
-     * @param fromKey The starting key (e.g., "C", "Dm").
-     * @param toKey The target key (e.g., "G", "Am").
-     * @return The number of semitones to transpose from the fromKey to the toKey.
+     * @param fromKey The original key (e.g., "C", "G", "Dm").
+     * @param toKey The target key (e.g., "D", "A", "Em").
+     * @return The number of semitones to transpose from the original key to the target key.
      */
     private int calculateSemitones(String fromKey, String toKey) {
         // Remove the 'm' suffix if present, as it is not needed for semitone calculation
@@ -380,10 +444,12 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
-     * Detect the key of a song based on the chords present in the content.
+     * Detect the key of the song based on the frequency of chords in the content.
+     * This method analyzes the content to find the most common root note,
+     * which is assumed to be the key of the song.
      *
      * @param content The content of the song as a string.
-     * @return The detected key as a string (e.g., "C", "G", "Am").
+     * @return The detected key as a string (e.g., "C", "G", "Dm").
      */
     private String detectKey(String content) {
         // Simple approach to detect the key based on chord frequency
@@ -405,23 +471,30 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     /**
      * Generate a file with the transposed content and save it to the local filesystem.
+     * The file will be named based on the source file name and the target key.
      *
-     * @param request The request containing the original chords
-     * @return A byte array representing the generated file
+     * @param request The request containing the source file name and target key.
+     * @return The name of the generated file.
+     * @throws PDFGenerationException if an error occurs during directory creation or file writing.
      */
-    private String generateFile(TransposeRequest request, String transposedContent) throws IOException {
-        String outputFileName = generateFileName(request.sourceFileName(), request.targetKey());
+    private String generateFile(TransposeRequest request, String transposedContent)
+    {
+        try {
+            String outputFileName = generateFileName(request.sourceFileName(), request.targetKey());
 
-        // Generate PDF with transposed content
-        byte[] pdfBytes = generatePdf(transposedContent);
+            // Generate PDF with transposed content
+            byte[] pdfBytes = generatePdf(transposedContent);
 
-        // Save PDF to local filesystem
-        Path outputDirectory = Paths.get(filesDirectory);
-        Files.createDirectories(outputDirectory); // Create directories if they don't exist
-        Path outputPath = outputDirectory.resolve(outputFileName);
-        Files.write(outputPath, pdfBytes);
+            // Save PDF to local filesystem
+            Path outputDirectory = Paths.get(filesDirectory);
+            Files.createDirectories(outputDirectory); // Create directories if they don't exist
+            Path outputPath = outputDirectory.resolve(outputFileName);
+            Files.write(outputPath, pdfBytes);
 
-        return outputFileName;
+            return outputFileName;
+        } catch (IOException e) {
+            throw new PDFGenerationException("Error during directory creation or file writing: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -430,7 +503,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      *
      * @param sourceFileName The name of the source file.
      * @param targetKey The target key for the transposition.
-     * @return A generated
+     * @return A generated file name with the target key.
      */
     private String generateFileName(String sourceFileName, String targetKey) {
         String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
@@ -439,12 +512,14 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     /**
      * Generate a PDF file with the transposed content.
+     * This method creates a PDF document, adds the transposed content line by line,
+     * and returns the generated PDF as a byte array.
      *
-     * @param content The transposed content to be included in the PDF.
-     * @return A byte array representing the generated PDF file.
-     * @throws IOException If an error occurs while generating the PDF.
+     * @param content The transposed content to include in the PDF.
+     * @return A byte array representing the generated PDF.
+     * @throws PDFGenerationException If an error occurs during PDF generation.
      */
-    private byte[] generatePdf(String content) throws IOException {
+    private byte[] generatePdf(String content) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         try (PDDocument document = new PDDocument()) {
@@ -458,7 +533,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             float yPosition = 750;
 
             // Extract the first line as title
-            String titleText = lines.length > 0 ? sanitizeText(lines[0]) : "";
+            String titleText = lines.length > 0 ? sanitizeTextForPdf(lines[0]) : "";
 
             // Set title
             contentStream.beginText();
@@ -477,7 +552,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             float halfSpaceWidth = standardSpaceWidth / 2; // Half-width space for chord alignment
 
             for (int i = 1; i < lines.length; i++) {
-                String line = sanitizeText(lines[i]);
+                String line = sanitizeTextForPdf(lines[i]);
 
                 // Check if we need a new page
                 if (yPosition < 50) {
@@ -499,12 +574,12 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                     // Process text before chord
                     if (matcher.start() > lastEnd) {
                         String textBefore = line.substring(lastEnd, matcher.start());
-                        xPosition = renderText(contentStream, textBefore, regularFont, fontSize, xPosition, yPosition, halfSpaceWidth);
+                        xPosition = renderTextWithCustomSpacing(contentStream, textBefore, regularFont, fontSize, xPosition, yPosition, halfSpaceWidth);
                     }
 
                     // Process chord with bold font
                     String chord = matcher.group();
-                    xPosition = renderText(contentStream, chord, boldFont, fontSize, xPosition, yPosition, halfSpaceWidth);
+                    xPosition = renderTextWithCustomSpacing(contentStream, chord, boldFont, fontSize, xPosition, yPosition, halfSpaceWidth);
 
                     lastEnd = matcher.end();
                 }
@@ -512,7 +587,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                 // Process remaining text after last chord
                 if (lastEnd < line.length()) {
                     String textAfter = line.substring(lastEnd);
-                    renderText(contentStream, textAfter, regularFont, fontSize, xPosition, yPosition, halfSpaceWidth);
+                    renderTextWithCustomSpacing(contentStream, textAfter, regularFont, fontSize, xPosition, yPosition, halfSpaceWidth);
                 }
 
                 yPosition -= 14; // Move to next line
@@ -520,15 +595,22 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
             contentStream.close();
             document.save(baos);
+        } catch (IOException e) {
+            throw new PDFGenerationException("Error generating PDF: " + e.getMessage(), e);
         }
 
         return baos.toByteArray();
     }
 
     /**
-     * Sanitizes text to ensure compatibility with PDF standard fonts
+     * Sanitize text for PDF rendering by replacing problematic characters.
+     * This method ensures that the text is safe for PDF generation by removing or replacing
+     * characters that might cause issues during rendering.
+     *
+     * @param text The text to sanitize.
+     * @return The sanitized text.
      */
-    private String sanitizeText(String text) {
+    private String sanitizeTextForPdf(String text) {
         if (text == null) return "";
 
         // Replace special characters that might cause issues
@@ -537,95 +619,22 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                 .replace("\t", "    ");              // Replace tabs with spaces
     }
 
-    @Override
-    public TransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request) {
-        try {
-            String originalContent = readFile(request.sourceFileName());
-
-            // Transpose the content by the specified number of semitones
-            String transposedContent = transposeContentBySemitones(originalContent, request.semitones());
-
-            // Generate the output file
-            String transposedFileName = generateFileNameByAddingSemitonesAdded(
-                    request.sourceFileName(),
-                    request.semitones()
-            );
-
-            // Generate and save the PDF
-            byte[] pdfBytes = generatePdf(transposedContent);
-            Path outputDirectory = Paths.get(filesDirectory);
-            Files.createDirectories(outputDirectory);
-            Path outputPath = outputDirectory.resolve(transposedFileName);
-            Files.write(outputPath, pdfBytes);
-
-            return new TransposeResponse(
-                    request.sourceFileName(),
-                    transposedFileName,
-                    null,
-                    request.semitones().toString(),
-                    true
-            );
-        } catch (IOException e) {
-            throw new ChordTransposeException("Error generating PDF: " + e.getMessage(), e);
-        } catch (Exception e) {
-            throw new ChordTransposeException("Unexpected error: " + e.getMessage(), e);
-        }
-    }
-
-    private String transposeContentBySemitones(String content, Integer semitones) {
-        StringBuilder result = new StringBuilder();
-        Matcher matcher = CHORD_PATTERN.matcher(content);
-
-        while (matcher.find()) {
-            String chord = matcher.group();
-            String transposedChord = transposeChordBySemitone(chord, semitones);
-            matcher.appendReplacement(result, transposedChord);
-        }
-        matcher.appendTail(result);
-
-        return result.toString();
-    }
-
-    private String transposeChordBySemitone(String chord, Integer semitones) {
-        // Pattern to match chords in the format: RootNote[Extensions][OptionalBass]
-        Pattern chordParser = Pattern.compile("^([A-G][#b]?)(.*?)(?:/([A-G][#b]?))?$");
-        Matcher matcher = chordParser.matcher(chord);
-
-        if (!matcher.matches()) {
-            return chord; // If the chord does not match the expected format, return it unchanged
-        }
-
-        String rootNote = matcher.group(1);      // Root note
-        String suffix = matcher.group(2);        // Extensions (m, 7, sus4, etc)
-        String bassNote = matcher.group(3);      // Bass note (optional)
-
-        // Transpose the root note
-        String newRootNote = transposeNote(rootNote, semitones);
-        if (newRootNote == null) return chord;
-
-        // Transpose the bass note if present
-        String newBassNote = null;
-        if (bassNote != null) {
-            newBassNote = transposeNote(bassNote, semitones);
-            if (newBassNote == null) return chord;
-        }
-
-        // Re-build the transposed chord
-        StringBuilder result = new StringBuilder(newRootNote).append(suffix);
-        if (newBassNote != null) {
-            result.append("/").append(newBassNote);
-        }
-
-        return result.toString();
-    }
-
     /**
-     * Renders text with specified font, handling spaces with half-width
+     * Render text with custom spacing to ensure chords are aligned correctly.
+     * This method processes the text character by character to maintain precise spacing.
      *
-     * @return the new x position after rendering
+     * @param contentStream The content stream to write to.
+     * @param text The text to render.
+     * @param font The font to use for rendering.
+     * @param fontSize The size of the font.
+     * @param xPosition The initial x position for rendering.
+     * @param yPosition The y position for rendering.
+     * @param halfSpaceWidth The width of a half-space for chord alignment.
+     * @return The updated x position after rendering the text.
+     * @throws IOException If an error occurs while writing to the content stream.
      */
-    private float renderText(PDPageContentStream contentStream, String text, PDType1Font font,
-                             float fontSize, float xPosition, float yPosition, float halfSpaceWidth)
+    private float renderTextWithCustomSpacing(PDPageContentStream contentStream, String text, PDType1Font font,
+                                              float fontSize, float xPosition, float yPosition, float halfSpaceWidth)
             throws IOException {
 
         if (text.isEmpty()) return xPosition;
@@ -673,9 +682,14 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     }
 
     /**
-     * Generate a file name for the transposed file based on the source file name, target key and semitones.
+     * Generate a file name for the transposed file based on the source file name and semitone offset.
+     * The generated file name will be in the format: "sourceFileName_semitoneOffset.pdf".
+     *
+     * @param sourceFileName The name of the source file.
+     * @param semitones The number of semitones to transpose.
+     * @return A generated file name with semitone offset.
      */
-    private String generateFileNameByAddingSemitonesAdded(String sourceFileName, int semitones) {
+    private String generateFileNameWithSemitoneOffset(String sourceFileName, int semitones) {
         String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
         String semitoneIndicator = semitones >= 0 ? "+" + semitones : String.valueOf(semitones);
         return baseName + "_" + semitoneIndicator + ".pdf";
