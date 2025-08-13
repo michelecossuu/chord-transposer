@@ -469,9 +469,10 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             yPosition -= 30; // Add space after title
 
             // Font settings
-            PDType1Font font = PDType1Font.COURIER;
+            PDType1Font regularFont = PDType1Font.COURIER;
+            PDType1Font boldFont = PDType1Font.COURIER_BOLD;
             float fontSize = 11;
-            float standardSpaceWidth = font.getSpaceWidth() * fontSize / 1000;
+            float standardSpaceWidth = regularFont.getSpaceWidth() * fontSize / 1000;
             float halfSpaceWidth = standardSpaceWidth / 2; // Half-width space for chord alignment
 
             for (int i = 1; i < lines.length; i++) {
@@ -489,43 +490,30 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                 // Process line character by character with precise positioning
                 float xPosition = 50; // Starting x position
 
-                contentStream.beginText();
-                contentStream.setFont(font, fontSize);
-                contentStream.newLineAtOffset(xPosition, yPosition);
+                // Find all chord matches in the line
+                Matcher matcher = CHORD_PATTERN.matcher(line);
+                int lastEnd = 0;
 
-                StringBuilder textBuffer = new StringBuilder();
-
-                for (int j = 0; j < line.length(); j++) {
-                    char c = line.charAt(j);
-
-                    if (c == ' ') {
-                        // Output any accumulated text
-                        if (!textBuffer.isEmpty()) {
-                            contentStream.showText(textBuffer.toString());
-                            textBuffer.setLength(0); // Clear buffer
-                        }
-
-                        // End current text object, move position, and start a new text object
-                        contentStream.endText();
-                        xPosition += halfSpaceWidth; // Half-width space
-                        contentStream.beginText();
-                        contentStream.setFont(font, fontSize);
-                        contentStream.newLineAtOffset(xPosition, yPosition);
-                    } else {
-                        // Add character to buffer
-                        textBuffer.append(c);
-
-                        // Track position for next character
-                        xPosition += font.getStringWidth(String.valueOf(c)) * fontSize / 1000;
+                while (matcher.find()) {
+                    // Process text before chord
+                    if (matcher.start() > lastEnd) {
+                        String textBefore = line.substring(lastEnd, matcher.start());
+                        xPosition = renderText(contentStream, textBefore, regularFont, fontSize, xPosition, yPosition, halfSpaceWidth);
                     }
+
+                    // Process chord with bold font
+                    String chord = matcher.group();
+                    xPosition = renderText(contentStream, chord, boldFont, fontSize, xPosition, yPosition, halfSpaceWidth);
+
+                    lastEnd = matcher.end();
                 }
 
-                // Output any remaining text
-                if (!textBuffer.isEmpty()) {
-                    contentStream.showText(textBuffer.toString());
+                // Process remaining text after last chord
+                if (lastEnd < line.length()) {
+                    String textAfter = line.substring(lastEnd);
+                    renderText(contentStream, textAfter, regularFont, fontSize, xPosition, yPosition, halfSpaceWidth);
                 }
 
-                contentStream.endText();
                 yPosition -= 14; // Move to next line
             }
 
