@@ -40,6 +40,9 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
     private static final String[] NOTES = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     private static final String[] FLAT_NOTES = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
 
+    private static final String[] ITALIAN_NOTES = {"DO", "DO#", "RE", "RE#", "MI", "FA", "FA#", "SOL", "SOL#", "LA", "LA#", "SI"};
+    private static final String[] ITALIAN_FLAT_NOTES = {"DO", "REb", "RE", "MIb", "MI", "FA", "SOLb", "SOL", "LAb", "LA", "SIb", "SI"};
+
     static {
         NOTE_TO_SEMITONE.put("C", 0);
         NOTE_TO_SEMITONE.put("C#", 1); NOTE_TO_SEMITONE.put("Db", 1);
@@ -53,11 +56,25 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         NOTE_TO_SEMITONE.put("A", 9);
         NOTE_TO_SEMITONE.put("A#", 10); NOTE_TO_SEMITONE.put("Bb", 10);
         NOTE_TO_SEMITONE.put("B", 11);
+
+        // Notazione italiana/latina
+        NOTE_TO_SEMITONE.put("DO", 0);
+        NOTE_TO_SEMITONE.put("DO#", 1);  NOTE_TO_SEMITONE.put("REb", 1);
+        NOTE_TO_SEMITONE.put("RE", 2);
+        NOTE_TO_SEMITONE.put("RE#", 3);  NOTE_TO_SEMITONE.put("MIb", 3);
+        NOTE_TO_SEMITONE.put("MI", 4);
+        NOTE_TO_SEMITONE.put("FA", 5);
+        NOTE_TO_SEMITONE.put("FA#", 6);  NOTE_TO_SEMITONE.put("SOLb", 6);
+        NOTE_TO_SEMITONE.put("SOL", 7);
+        NOTE_TO_SEMITONE.put("SOL#", 8); NOTE_TO_SEMITONE.put("LAb", 8);
+        NOTE_TO_SEMITONE.put("LA", 9);
+        NOTE_TO_SEMITONE.put("LA#", 10); NOTE_TO_SEMITONE.put("SIb", 10);
+        NOTE_TO_SEMITONE.put("SI", 11);
     }
 
     // pattern to ricognize chords (like Cmaj, Dm7, Gsus4, etc)
     private static final Pattern CHORD_PATTERN = Pattern.compile(
-            "\\b([A-G][#b]?)(" +
+            "\\b((?:[A-G][#b]?)|(?:DO|RE|MI|FA|SOL|LA|SI)(?:[#b]?))(" +
                     "maj\\d*|" +           // maj, maj7, maj9, maj11, maj13
                     "min\\d*|" +           // min, min7, min9, min11, min13
                     "m\\d*|" +             // m, m7, m9, m11, m13
@@ -68,8 +85,9 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
                     "\\d+|" +              // 7, 9, 11, 13
                     "\\+\\d*|" +           // +, +7 (increase symbol)
                     "°\\d*|" +             // ° (decrease symbol)
-                    "ø\\d*" +              // ø (half-diminished)
-                    ")?(?:/([A-G][#b]?))?\\b" // Optionally alternative bass (/E)
+                    "ø\\d*|" +             // ø (half-diminished)
+                    "-" +                  // Trattino per accordi minori italiani (LA-, RE-, MI-)
+                    ")?(?:/([A-G][#b]?|DO|RE|MI|FA|SOL|LA|SI)(?:[#b]?))?\\b" // Bass note
     );
 
     /**
@@ -328,12 +346,14 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @return The transposed content with chords modified according to the specified semitones.
      */
     private String transposeContent(String content, int semitones) {
+        boolean useItalianNotation = shouldUseItalianNotation(content);
+
         StringBuilder result = new StringBuilder();
         Matcher matcher = CHORD_PATTERN.matcher(content);
 
         while (matcher.find()) {
             String chord = matcher.group();
-            String transposedChord = transposeChord(chord, semitones);
+            String transposedChord = transposeChord(chord, semitones, useItalianNotation);
             matcher.appendReplacement(result, transposedChord);
         }
         matcher.appendTail(result);
@@ -349,32 +369,42 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
      * @return The transposed chord as a string, or the original chord if it cannot be transposed.
      */
-    private String transposeChord(String chord, int semitones) {
-        // Pattern to match chords in the format: RootNote[Extensions][OptionalBass]
-        Pattern chordParser = Pattern.compile("^([A-G][#b]?)(.*?)(?:/([A-G][#b]?))?$");
-        Matcher matcher = chordParser.matcher(chord);
+    private String transposeChord(String chord, int semitones, boolean useItalianNotation) {
+        Matcher matcher = CHORD_PATTERN.matcher(chord);
 
         if (!matcher.matches()) {
-            return chord; // If the chord does not match the expected format, return it unchanged
+            return chord;
         }
 
-        String rootNote = matcher.group(1);      // Root note
-        String suffix = matcher.group(2);        // Extensions (m, 7, sus4, etc)
-        String bassNote = matcher.group(3);      // Bass note (optional)
+        String rootNote = matcher.group(1);
+        String suffix = matcher.group(2) != null ? matcher.group(2) : "";
+        String bassNote = matcher.group(3);
+
+        // Check if the chord is a minor chord with Italian notation (e.g., "SI-")
+        boolean isItalianMinor = suffix.equals("-");
 
         // Transpose the root note
-        String newRootNote = transposeNote(rootNote, semitones);
+        String newRootNote = transposeNote(rootNote, semitones, useItalianNotation);
         if (newRootNote == null) return chord;
 
         // Transpose the bass note if present
         String newBassNote = null;
         if (bassNote != null) {
-            newBassNote = transposeNote(bassNote, semitones);
+            newBassNote = transposeNote(bassNote, semitones, useItalianNotation);
             if (newBassNote == null) return chord;
         }
 
-        // Re-build the transposed chord
-        StringBuilder result = new StringBuilder(newRootNote).append(suffix);
+        // Rebuild the transposed chord
+        StringBuilder result = new StringBuilder(newRootNote);
+
+        // Add the suffix, preserving Italian minor notation if needed
+        if (isItalianMinor) {
+            result.append("-");
+        } else if (!suffix.isEmpty()) {
+            result.append(suffix);
+        }
+
+        // Add the bass note if present
         if (newBassNote != null) {
             result.append("/").append(newBassNote);
         }
@@ -390,7 +420,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * @param semitones The number of semitones to transpose (positive for up, negative for down).
      * @return The transposed note as a string, or null if the note is not recognized.
      */
-    private String transposeNote(String note, int semitones) {
+    private String transposeNote(String note, int semitones, boolean useItalianNotation) {
         Integer currentSemitone = NOTE_TO_SEMITONE.get(note);
         if (currentSemitone == null) {
             return null; // Note not recognized
@@ -398,8 +428,11 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
         int newSemitone = (currentSemitone + semitones + 12) % 12;
 
-        // Choose between sharps and flats based on the semitone value
-        return shouldPreferFlats(semitones) ? FLAT_NOTES[newSemitone] : NOTES[newSemitone];
+        if (useItalianNotation) {
+            return shouldPreferFlats(semitones) ? ITALIAN_FLAT_NOTES[newSemitone] : ITALIAN_NOTES[newSemitone];
+        } else {
+            return shouldPreferFlats(semitones) ? FLAT_NOTES[newSemitone] : NOTES[newSemitone];
+        }
     }
 
     /**
@@ -693,5 +726,39 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
         String semitoneIndicator = semitones >= 0 ? "+" + semitones : String.valueOf(semitones);
         return baseName + "_" + semitoneIndicator + ".pdf";
+    }
+
+    private boolean shouldUseItalianNotation(String content) {
+        // Conta le occorrenze di notazione italiana vs anglosassone
+        Pattern italianPattern = Pattern.compile("\\b(?:DO|RE-?|MI-?|FA|SOL[#4]?|LA-?|SIb?)\\b");
+        Pattern anglosaxonPattern = Pattern.compile("\\b[A-G][#b]?(?!-)[a-z]*\\b"); // Escludi note italiane che finiscono con -
+
+        Matcher italianMatcher = italianPattern.matcher(content);
+        Matcher anglosaxonMatcher = anglosaxonPattern.matcher(content);
+
+        int italianCount = 0;
+        int anglosaxonCount = 0;
+
+        while (italianMatcher.find()) italianCount++;
+        while (anglosaxonMatcher.find()) {
+            String match = anglosaxonMatcher.group();
+            // Verifica che non sia una parola italiana che contiene lettere A-G
+            if (isValidAnglosaxonChord(match)) {
+                anglosaxonCount++;
+            }
+        }
+
+        return italianCount > anglosaxonCount;
+    }
+
+    private boolean isValidAnglosaxonChord(String text) {
+        // Lista di parole italiane comuni che potrebbero contenere A-G ma non sono accordi
+        String[] italianWords = {"amar", "servir", "terra", "deserta", "ombra", "ali", "bene"};
+        for (String word : italianWords) {
+            if (text.toLowerCase().contains(word.toLowerCase())) {
+                return false;
+            }
+        }
+        return true;
     }
 }
