@@ -3,6 +3,7 @@ package com.michelecossu.chords.transposer.service.impl;
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
 import com.michelecossu.chords.transposer.web.exception.ChordTransposeException;
 import com.michelecossu.chords.transposer.web.exception.TargetKeyException;
+import com.michelecossu.chords.transposer.web.request.RelativeTransposeRequest;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
 import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -534,5 +535,149 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
         return text.replaceAll("[^ -~]", " ") // Replace non-ASCII printable chars with spaces
                 .replace("→", "->")                  // Replace arrow with ASCII equivalent
                 .replace("\t", "    ");              // Replace tabs with spaces
+    }
+
+    @Override
+    public TransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request) {
+        try {
+            String originalContent = readFile(request.sourceFileName());
+
+            // Transpose the content by the specified number of semitones
+            String transposedContent = transposeContentBySemitones(originalContent, request.semitones());
+
+            // Generate the output file
+            String transposedFileName = generateFileNameByAddingSemitonesAdded(
+                    request.sourceFileName(),
+                    request.semitones()
+            );
+
+            // Generate and save the PDF
+            byte[] pdfBytes = generatePdf(transposedContent);
+            Path outputDirectory = Paths.get(filesDirectory);
+            Files.createDirectories(outputDirectory);
+            Path outputPath = outputDirectory.resolve(transposedFileName);
+            Files.write(outputPath, pdfBytes);
+
+            return new TransposeResponse(
+                    request.sourceFileName(),
+                    transposedFileName,
+                    null,
+                    request.semitones().toString(),
+                    true
+            );
+        } catch (IOException e) {
+            throw new ChordTransposeException("Error generating PDF: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ChordTransposeException("Unexpected error: " + e.getMessage(), e);
+        }
+    }
+
+    private String transposeContentBySemitones(String content, Integer semitones) {
+        StringBuilder result = new StringBuilder();
+        Matcher matcher = CHORD_PATTERN.matcher(content);
+
+        while (matcher.find()) {
+            String chord = matcher.group();
+            String transposedChord = transposeChordBySemitone(chord, semitones);
+            matcher.appendReplacement(result, transposedChord);
+        }
+        matcher.appendTail(result);
+
+        return result.toString();
+    }
+
+    private String transposeChordBySemitone(String chord, Integer semitones) {
+        // Pattern to match chords in the format: RootNote[Extensions][OptionalBass]
+        Pattern chordParser = Pattern.compile("^([A-G][#b]?)(.*?)(?:/([A-G][#b]?))?$");
+        Matcher matcher = chordParser.matcher(chord);
+
+        if (!matcher.matches()) {
+            return chord; // If the chord does not match the expected format, return it unchanged
+        }
+
+        String rootNote = matcher.group(1);      // Root note
+        String suffix = matcher.group(2);        // Extensions (m, 7, sus4, etc)
+        String bassNote = matcher.group(3);      // Bass note (optional)
+
+        // Transpose the root note
+        String newRootNote = transposeNote(rootNote, semitones);
+        if (newRootNote == null) return chord;
+
+        // Transpose the bass note if present
+        String newBassNote = null;
+        if (bassNote != null) {
+            newBassNote = transposeNote(bassNote, semitones);
+            if (newBassNote == null) return chord;
+        }
+
+        // Re-build the transposed chord
+        StringBuilder result = new StringBuilder(newRootNote).append(suffix);
+        if (newBassNote != null) {
+            result.append("/").append(newBassNote);
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Renders text with specified font, handling spaces with half-width
+     *
+     * @return the new x position after rendering
+     */
+    private float renderText(PDPageContentStream contentStream, String text, PDType1Font font,
+                             float fontSize, float xPosition, float yPosition, float halfSpaceWidth)
+            throws IOException {
+
+        if (text.isEmpty()) return xPosition;
+
+        // Process character by character for precise spacing
+        float currentX = xPosition;
+        StringBuilder textBuffer = new StringBuilder();
+
+        for (int j = 0; j < text.length(); j++) {
+            char c = text.charAt(j);
+
+            if (c == ' ') {
+                // Output any accumulated text
+                if (!textBuffer.isEmpty()) {
+                    contentStream.beginText();
+                    contentStream.setFont(font, fontSize);
+                    contentStream.newLineAtOffset(currentX, yPosition);
+                    contentStream.showText(textBuffer.toString());
+                    contentStream.endText();
+
+                    // Update position based on text width
+                    currentX += font.getStringWidth(textBuffer.toString()) * fontSize / 1000;
+                    textBuffer.setLength(0);
+                }
+
+                // Add half-width space
+                currentX += halfSpaceWidth;
+            } else {
+                textBuffer.append(c);
+            }
+        }
+
+        // Output any remaining text
+        if (!textBuffer.isEmpty()) {
+            contentStream.beginText();
+            contentStream.setFont(font, fontSize);
+            contentStream.newLineAtOffset(currentX, yPosition);
+            contentStream.showText(textBuffer.toString());
+            contentStream.endText();
+
+            currentX += font.getStringWidth(textBuffer.toString()) * fontSize / 1000;
+        }
+
+        return currentX;
+    }
+
+    /**
+     * Generate a file name for the transposed file based on the source file name, target key and semitones.
+     */
+    private String generateFileNameByAddingSemitonesAdded(String sourceFileName, int semitones) {
+        String baseName = sourceFileName.substring(0, sourceFileName.lastIndexOf('.'));
+        String semitoneIndicator = semitones >= 0 ? "+" + semitones : String.valueOf(semitones);
+        return baseName + "_" + semitoneIndicator + ".pdf";
     }
 }

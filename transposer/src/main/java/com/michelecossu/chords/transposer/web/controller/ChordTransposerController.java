@@ -1,6 +1,7 @@
 package com.michelecossu.chords.transposer.web.controller;
 
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
+import com.michelecossu.chords.transposer.web.request.RelativeTransposeRequest;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
 import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import jakarta.validation.Valid;
@@ -24,6 +25,18 @@ public class ChordTransposerController {
     @PostMapping("/create-file")
     public ResponseEntity<TransposeResponse> createTransposedFile(@Valid @RequestBody TransposeRequest request) throws IOException {
         TransposeResponse response = chordTransposeService.generatePdfWithTransposedChords(request);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.transposedFileName() + "\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(response);
+    }
+
+    @PostMapping("/transpose-by-semitones")
+    public ResponseEntity<TransposeResponse> transposeByRelativeSemitones(
+            @Valid @RequestBody RelativeTransposeRequest request) {
+
+        TransposeResponse response = chordTransposeService.transposeChordsBySemitones(request);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.transposedFileName() + "\"")
