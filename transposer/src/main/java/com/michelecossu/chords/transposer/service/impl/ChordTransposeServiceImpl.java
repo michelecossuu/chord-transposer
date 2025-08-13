@@ -730,7 +730,7 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
 
     private boolean shouldUseItalianNotation(String content) {
         // Conta le occorrenze di notazione italiana vs anglosassone
-        Pattern italianPattern = Pattern.compile("\\b(?:DO|RE-?|MI-?|FA|SOL[#4]?|LA-?|SIb?)\\b");
+        Pattern italianPattern = Pattern.compile("\\b(?:DO|RE|MI|FA|SOL?|LA|SI)\\b");
         Pattern anglosaxonPattern = Pattern.compile("\\b[A-G][#b]?(?!-)[a-z]*\\b"); // Escludi note italiane che finiscono con -
 
         Matcher italianMatcher = italianPattern.matcher(content);
