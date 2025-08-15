@@ -3,6 +3,7 @@ package com.michelecossu.chords.transposer.web.controller;
 import com.michelecossu.chords.transposer.service.ChordTransposeService;
 import com.michelecossu.chords.transposer.web.request.RelativeTransposeRequest;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
+import com.michelecossu.chords.transposer.web.response.RelativeTransposeResponse;
 import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -33,10 +34,10 @@ public class ChordTransposerController {
     }
 
     @PostMapping("/transpose-by-semitones")
-    public ResponseEntity<TransposeResponse> transposeByRelativeSemitones(
+    public ResponseEntity<RelativeTransposeResponse> transposeByRelativeSemitones(
             @Valid @RequestBody RelativeTransposeRequest request) {
 
-        TransposeResponse response = chordTransposeService.transposeChordsBySemitones(request);
+        RelativeTransposeResponse response = chordTransposeService.transposeChordsBySemitones(request);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.transposedFileName() + "\"")

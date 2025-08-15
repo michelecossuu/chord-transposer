@@ -4,6 +4,7 @@ import com.michelecossu.chords.transposer.service.ChordTransposeService;
 import com.michelecossu.chords.transposer.web.exception.*;
 import com.michelecossu.chords.transposer.web.request.RelativeTransposeRequest;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
+import com.michelecossu.chords.transposer.web.response.RelativeTransposeResponse;
 import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -139,11 +140,11 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
      * and generates a new PDF file with the transposed chords.
      *
      * @param request the request containing the original chords and the number of semitones to transpose
-     * @return a TransposeResponse containing the details of the transposed file
+     * @return a RelativeTransposeResponse containing the details of the transposed file
      * @throws ChordTransposeException if an error occurs during the transposition or file generation
      */
     @Override
-    public TransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request) {
+    public RelativeTransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request) {
         try {
             String originalContent = readFile(request.sourceFileName());
 
@@ -163,11 +164,10 @@ public class ChordTransposeServiceImpl implements ChordTransposeService {
             Path outputPath = outputDirectory.resolve(transposedFileName);
             Files.write(outputPath, pdfBytes);
 
-            return new TransposeResponse(
+            return new RelativeTransposeResponse(
                     request.sourceFileName(),
                     transposedFileName,
-                    null,
-                    request.semitones().toString(),
+                    request.semitones(),
                     true
             );
         } catch (IOException e) {

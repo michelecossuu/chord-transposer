@@ -2,6 +2,7 @@ package com.michelecossu.chords.transposer.service;
 
 import com.michelecossu.chords.transposer.web.request.RelativeTransposeRequest;
 import com.michelecossu.chords.transposer.web.request.TransposeRequest;
+import com.michelecossu.chords.transposer.web.response.RelativeTransposeResponse;
 import com.michelecossu.chords.transposer.web.response.TransposeResponse;
 import java.io.IOException;
 
@@ -20,7 +21,7 @@ public interface ChordTransposeService {
      * Transposes chords by a specified number of semitones relative to the original chords.
      *
      * @param request the request containing the original chords and the number of semitones to transpose
-     * @return a TransposeResponse containing the details of the transposed file
+     * @return a RelativeTransposeResponse containing the details of the transposed file
      */
-    TransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request);
+    RelativeTransposeResponse transposeChordsBySemitones(RelativeTransposeRequest request);
 }
